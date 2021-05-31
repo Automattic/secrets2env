@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      uploadurl: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Extract Tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/*/}" | xargs >> $GITHUB_ENV
+
+      - name: Validate Build Products
+        run: |
+          # Ensure that the Cargo.lock file is up to date
+          cargo --locked
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: ""
+          draft: true
+          prerelease: false
+  
+  # Build for Windows
+  windows:
+    runs-on: windows-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: secrets2env.exe
+          path: target/release/secrets2env.exe
+      - name: Package
+        id: package-windows-release-asset
+        run: Compress-Archive target/release/secrets2env.exe secrets2env-windows.zip
+      - name: Attach Artifact to Release
+        id: upload-windows-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: secrets2env-windows.zip
+          asset_name: secrets2env-windows.zip
+          asset_content_type: application/zip
+  # Build for Mac
+  mac:
+    runs-on: macos-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: secrets2env-macos
+          path: target/release/secrets2env
+      - name: Package
+        id: package-mac-release-asset
+        run: |
+          cd target/release
+          zip secrets2env-macos.zip secrets2env
+          mv secrets2env-macos.zip ../../
+          cd -
+      - name: Attach Artifact to Release
+        id: upload-mac-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: secrets2env-macos.zip
+          asset_name: secrets2env-macos.zip
+          asset_content_type: application/zip
+  # Build for Linux
+  linux:
+    runs-on: ubuntu-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: secrets2env-linux
+          path: target/release/secrets2env
+      - name: Package
+        id: package-linux-release-asset
+        run: |
+          cd target/release
+          zip secrets2env-linux.zip secrets2env
+          mv secrets2env-linux.zip ../../
+          cd -
+      - name: Attach Artifact to Release
+        id: upload-linux-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: secrets2env-linux.zip
+          asset_name: secrets2env-linux.zip
+          asset_content_type: application/zip
